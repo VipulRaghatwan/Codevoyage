@@ -1,0 +1,22 @@
+# Environment and Secrets
+.env
+*.env.local
+
+# Dependency directories
+node_modules/
+backend/target/
+frontend/dist/
+execution-service/dist/
+execution-service/node_modules/
+frontend/node_modules/
+
+# Local databases & logs
+backend/data/
+*.log
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

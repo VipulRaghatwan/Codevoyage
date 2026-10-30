@@ -464,44 +464,81 @@ public class ProgressService {
                         userProgressRepository.save(nextProgress);
                     });
 
-            // Check if all missions in Ignis Station (World 1) are complete
-            if (mission.getWorld().getWorldOrder() == 1) {
-                List<Mission> ignisMissions = missionRepository.findByWorldIdOrderByMissionOrderAsc(mission.getWorld().getId());
-                List<UserProgress> userIgnisProgress = userProgressRepository.findByUserId(userId).stream()
-                        .filter(up -> up.getMission().getWorld().getId().equals(mission.getWorld().getId()))
-                        .filter(up -> Boolean.TRUE.equals(up.getCompleted()))
-                        .toList();
+            // Check if all missions in the current world are complete
+            int currentWorldOrder = mission.getWorld().getWorldOrder();
+            List<Mission> currentWorldMissions = missionRepository.findByWorldIdOrderByMissionOrderAsc(mission.getWorld().getId());
+            List<UserProgress> userWorldProgress = userProgressRepository.findByUserId(userId).stream()
+                    .filter(up -> up.getMission().getWorld().getId().equals(mission.getWorld().getId()))
+                    .filter(up -> Boolean.TRUE.equals(up.getCompleted()))
+                    .toList();
 
-                if (!ignisMissions.isEmpty() && userIgnisProgress.size() >= ignisMissions.size()) {
-                    // Unlock FIRST_LAUNCH, WORLD_CONQUEROR, IGNIS_STATION_HERO
+            if (!currentWorldMissions.isEmpty() && userWorldProgress.size() >= currentWorldMissions.size()) {
+                if (currentWorldOrder == 1) {
                     awardAchievement(user, "FIRST_LAUNCH");
                     awardAchievement(user, "WORLD_CONQUEROR");
                     awardAchievement(user, "IGNIS_STATION_HERO");
-
-                    // Unlock World 2 (Kryon Belt)
-                    worldRepository.findAll().stream()
-                            .filter(w -> w.getWorldOrder() == 2)
-                            .findFirst()
-                            .ifPresent(world2 -> {
-                                world2.setUnlockedByDefault(true);
-                                worldRepository.save(world2);
-
-                                // Unlock World 2 Mission 1 if exists
-                                missionRepository.findByWorldIdOrderByMissionOrderAsc(world2.getId())
-                                        .stream()
-                                        .findFirst()
-                                        .ifPresent(w2m1 -> {
-                                             UserProgress w2m1Progress = userProgressRepository.findByUserIdAndMissionId(userId, w2m1.getId())
-                                                     .orElseGet(() -> new UserProgress(user, w2m1, true));
-                                             w2m1Progress.setUnlocked(true);
-                                             userProgressRepository.save(w2m1Progress);
-                                         });
-                            });
-
-                    // Advance user currentSector
-                    user.setCurrentSector(Math.max(user.getCurrentSector() != null ? user.getCurrentSector() : 1, 2));
-                    userRepository.save(user);
+                } else if (currentWorldOrder == 2) {
+                    awardAchievement(user, "WORLD_CONQUEROR");
+                    awardAchievement(user, "LOGIC_PILOT");
                 }
+
+                int nextWorldOrder = currentWorldOrder + 1;
+
+                // Unlock Next World (e.g. World 2 -> World 3 Nova Sector)
+                worldRepository.findAll().stream()
+                        .filter(w -> w.getWorldOrder() == nextWorldOrder)
+                        .findFirst()
+                        .ifPresent(nextWorld -> {
+                            nextWorld.setUnlockedByDefault(true);
+                            worldRepository.save(nextWorld);
+
+                            // Unlock Mission 1 in next world if exists
+                            missionRepository.findByWorldIdOrderByMissionOrderAsc(nextWorld.getId())
+                                    .stream()
+                                    .findFirst()
+                                    .ifPresent(firstMission -> {
+                                        UserProgress firstMissionProgress = userProgressRepository.findByUserIdAndMissionId(userId, firstMission.getId())
+                                                .orElseGet(() -> new UserProgress(user, firstMission, true));
+                                        firstMissionProgress.setUnlocked(true);
+                                        userProgressRepository.save(firstMissionProgress);
+                                    });
+                        });
+
+                // Advance user currentSector
+                user.setCurrentSector(Math.max(user.getCurrentSector() != null ? user.getCurrentSector() : 1, nextWorldOrder));
+                userRepository.save(user);
+            }
+        } else {
+            // Even if already completed before, ensure next mission and next world are unlocked
+            missionRepository.findByWorldIdOrderByMissionOrderAsc(mission.getWorld().getId())
+                    .stream()
+                    .filter(m -> m.getMissionOrder() == mission.getMissionOrder() + 1)
+                    .findFirst()
+                    .ifPresent(nextMission -> {
+                        UserProgress nextProgress = userProgressRepository.findByUserIdAndMissionId(userId, nextMission.getId())
+                                .orElseGet(() -> new UserProgress(user, nextMission, true));
+                        nextProgress.setUnlocked(true);
+                        userProgressRepository.save(nextProgress);
+                    });
+
+            int currentWorldOrder = mission.getWorld().getWorldOrder();
+            List<Mission> currentWorldMissions = missionRepository.findByWorldIdOrderByMissionOrderAsc(mission.getWorld().getId());
+            List<UserProgress> userWorldProgress = userProgressRepository.findByUserId(userId).stream()
+                    .filter(up -> up.getMission().getWorld().getId().equals(mission.getWorld().getId()))
+                    .filter(up -> Boolean.TRUE.equals(up.getCompleted()))
+                    .toList();
+
+            if (!currentWorldMissions.isEmpty() && userWorldProgress.size() >= currentWorldMissions.size()) {
+                int nextWorldOrder = currentWorldOrder + 1;
+                worldRepository.findAll().stream()
+                        .filter(w -> w.getWorldOrder() == nextWorldOrder)
+                        .findFirst()
+                        .ifPresent(nextWorld -> {
+                            nextWorld.setUnlockedByDefault(true);
+                            worldRepository.save(nextWorld);
+                        });
+                user.setCurrentSector(Math.max(user.getCurrentSector() != null ? user.getCurrentSector() : 1, nextWorldOrder));
+                userRepository.save(user);
             }
         }
     }

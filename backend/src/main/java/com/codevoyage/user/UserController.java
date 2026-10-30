@@ -51,6 +51,35 @@ public class UserController {
         User user = userRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + authentication.getName()));
 
+        // Ensure user's currentSector reflects all completed worlds
+        List<com.codevoyage.progress.UserProgress> progressList = userProgressRepository.findByUserId(user.getId());
+        Map<Long, com.codevoyage.progress.UserProgress> pMap = progressList.stream()
+                .collect(java.util.stream.Collectors.toMap(up -> up.getMission().getId(), up -> up, (a, b) -> a));
+
+        int calculatedSector = 1;
+        List<com.codevoyage.world.World> allWorldsList = worldRepository.findAll().stream()
+                .sorted(java.util.Comparator.comparingInt(com.codevoyage.world.World::getWorldOrder))
+                .collect(java.util.stream.Collectors.toList());
+
+        for (com.codevoyage.world.World w : allWorldsList) {
+            if (w.getMissions().isEmpty()) break;
+            boolean allWorldDone = w.getMissions().stream()
+                    .allMatch(m -> {
+                        com.codevoyage.progress.UserProgress up = pMap.get(m.getId());
+                        return up != null && Boolean.TRUE.equals(up.getCompleted());
+                    });
+            if (allWorldDone) {
+                calculatedSector = Math.max(calculatedSector, w.getWorldOrder() + 1);
+            } else {
+                break;
+            }
+        }
+
+        if (user.getCurrentSector() == null || calculatedSector > user.getCurrentSector()) {
+            user.setCurrentSector(calculatedSector);
+            user = userRepository.save(user);
+        }
+
         return ResponseEntity.ok(mapToProfileDTO(user));
     }
 

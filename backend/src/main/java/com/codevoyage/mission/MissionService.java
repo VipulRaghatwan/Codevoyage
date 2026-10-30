@@ -51,6 +51,31 @@ public class MissionService {
         if (user != null) {
             userProgressRepository.findByUserId(user.getId())
                     .forEach(up -> progressMap.put(up.getMission().getId(), up));
+
+            // Dynamically synchronize currentSector based on actual completed missions
+            int calculatedSector = 1;
+            List<World> allWorldsList = worldRepository.findAll().stream()
+                    .sorted(Comparator.comparingInt(World::getWorldOrder))
+                    .collect(Collectors.toList());
+
+            for (World w : allWorldsList) {
+                if (w.getMissions().isEmpty()) break;
+                boolean allWorldDone = w.getMissions().stream()
+                        .allMatch(m -> {
+                            UserProgress up = progressMap.get(m.getId());
+                            return up != null && Boolean.TRUE.equals(up.getCompleted());
+                        });
+                if (allWorldDone) {
+                    calculatedSector = Math.max(calculatedSector, w.getWorldOrder() + 1);
+                } else {
+                    break;
+                }
+            }
+
+            if (user.getCurrentSector() == null || calculatedSector > user.getCurrentSector()) {
+                user.setCurrentSector(calculatedSector);
+                userRepository.save(user);
+            }
         }
 
         List<World> worlds = worldRepository.findAll().stream()
